@@ -1,0 +1,9 @@
+[package]
+name = "dna_encode"
+version = "0.1.0"
+description = "Encodes data into DNA Nucleotide pairs or RNA Nucleotides"
+edition = "2024"
+
+[dependencies]
+thiserror = "2.0.12"
+# bincode = { version = "2.0", features = ["serde", "std"], default-features = false, optional = true }
