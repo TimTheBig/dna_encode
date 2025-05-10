@@ -29,7 +29,7 @@ impl DNACode {
     }
 
     /// (Top, Bottom)
-    pub fn result(&self) -> (&[Nucleotide], &[Nucleotide]) {
+    pub fn values(&self) -> (&[Nucleotide], &[Nucleotide]) {
         (&self.top, &self.bottom)
     }
 }
@@ -92,7 +92,7 @@ pub struct RNACode {
 impl Display for RNACode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for nucleotide in &self.values {
-            write!(f, "{:R>}", nucleotide)?//.to_char_rna())?
+            write!(f, "{:R<}", nucleotide)?//.to_char_rna())?
         }
 
         Ok(())
@@ -137,7 +137,7 @@ impl RNACode {
         Self { values: output }
     }
 
-    pub fn result(&self) -> &[Nucleotide] {
+    pub fn values(&self) -> &[Nucleotide] {
         &self.values
     }
 }
@@ -157,7 +157,7 @@ impl FromStr for RNACode {
 
 /// A Nucleotide base of DNA or RNA, [wikipedia: Nucleotide base](https://en.wikipedia.org/wiki/Nucleotide_base)
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Nucleotide {
     /// Adenine = 00
     A = 0b_00,
@@ -186,7 +186,7 @@ impl Display for Nucleotide {
                 Nucleotide::T => write!(f, "U"),
             }
         } else {
-            panic!("fill for Nucleotide Display must be 'D'(DNA) or 'R'(RNA) like `{{:D>}}` or `{{:R>}}`")
+            panic!("fill for Nucleotide Display must be 'D'(DNA) or 'R'(RNA) like `{{:D<}}` or `{{:R<}}`")
         }
     }
 }
@@ -243,5 +243,49 @@ impl TryFrom<char> for Nucleotide {
             'U' | 'u' => Ok(Nucleotide::T),
             _ => Err(InvalidChar(c))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RNACode, DNACode, Nucleotide};
+
+    #[test]
+    fn test_rna() {
+        let rna: RNACode = "GCGCUGUCGA".parse().unwrap();
+        assert_eq!(rna.to_string(), "GCGCUGUCGA");
+
+        eprintln!("{}", RNACode::serialize_slice(include_bytes!("./lib.rs")));
+    }
+
+    #[test]
+    fn test_dna() {
+        let dna: DNACode = "GCGCTGTCGA\nCGCGACGGCT".parse().unwrap();
+        assert_eq!(dna.to_string(), "GCGCTGTCGA\nCGCGACGGCT");
+
+        eprintln!("{}", DNACode::serialize_slice(include_bytes!("./lib.rs")));
+    }
+
+    #[test]
+    fn test_dna_twice_rna() {
+        let dna = DNACode::serialize_slice(include_bytes!("./lib.rs"));
+        let dna_len = dna.bottom.len() + dna.top.len();
+
+        assert_eq!(dna_len / 2, RNACode::serialize_slice(include_bytes!("./lib.rs")).values.len());
+    }
+
+    #[test]
+    fn test_nucleotide() {
+        assert_eq!(format!("{:R<}", Nucleotide::T), "U");
+        assert_eq!(format!("{:D<}", Nucleotide::T), "T");
+
+        assert_eq!(Nucleotide::try_from('A').unwrap(), Nucleotide::try_from('a').unwrap());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_nucleotide_format() {
+        // T/U is different for rna and dna so this must be specified with fmt fill
+        let _ = format!("{}", Nucleotide::T);
     }
 }
