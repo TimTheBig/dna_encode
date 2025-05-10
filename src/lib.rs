@@ -1,6 +1,5 @@
 use std::{fmt::Display, str::FromStr};
 
-/// The nucleotides, top bottom order
 pub struct DNACode {
     top: Vec<Nucleotide>,
     bottom: Vec<Nucleotide>
@@ -48,8 +47,12 @@ impl From<RNACode> for DNACode {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DNACodeParseError {
-    #[error("Top and Bottom chains have different lengths")]
-    TopBottomLenDiff,
+    /// Top and Bottom chains have different lengths
+    #[error("Top and Bottom chains have different lengths, {} != {}", .top_len, .bottom_len)]
+    TopBottomLenDiff {
+        top_len: usize,
+        bottom_len: usize,
+    },
     /// Missing newline separating top and bottom chains
     #[error("Missing newline separating top and bottom chains")]
     NoNewline,
@@ -74,7 +77,10 @@ impl FromStr for DNACode {
         let (top_rna, bottom_rna) = s.split_once('\n')
             .ok_or(DNACodeParseError::NoNewline)?;
         if top_rna.len() != bottom_rna.len() {
-            return Err(DNACodeParseError::TopBottomLenDiff);
+            return Err(DNACodeParseError::TopBottomLenDiff {
+                top_len: top_rna.len(),
+                bottom_len: bottom_rna.len(),
+            });
         }
 
         Ok(Self {
