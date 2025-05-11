@@ -3,8 +3,7 @@ name = "dna_encode"
 version = "0.1.0"
 description = "Encodes data into DNA Nucleotide pairs or RNA Nucleotides"
 edition = "2024"
-licence = "LGPL-3.0"
+license = "LGPL-3.0"
 
 [dependencies]
 thiserror = "2.0.12"
-# bincode = { version = "2.0", features = ["serde", "std"], default-features = false, optional = true }

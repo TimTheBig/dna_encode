@@ -1,5 +1,15 @@
 use std::{fmt::Display, str::FromStr};
 
+#[macro_export]
+macro_rules! rna {
+    ($($nu:ident),+ $(,)?) => {
+        RNACode::from(vec![$( rna!(stringify!($nu).as_bytes()[0] as char) ),+]) // so user can say U or T
+    };
+    ($nu:expr) => {
+        const { Nucleotide::from_caps($nu) }
+    };
+}
+
 pub struct DNACode {
     top: Vec<Nucleotide>,
     bottom: Vec<Nucleotide>
@@ -90,6 +100,18 @@ impl FromStr for DNACode {
     }
 }
 
+impl From<(Vec<Nucleotide>, Vec<Nucleotide>)> for DNACode {
+    fn from((top_codes, bottom_codes): (Vec<Nucleotide>, Vec<Nucleotide>)) -> Self {
+        Self { top: top_codes, bottom: bottom_codes }
+    }
+}
+
+impl From<[Vec<Nucleotide>; 2]> for DNACode {
+    fn from([top_codes, bottom_codes]: [Vec<Nucleotide>; 2]) -> Self {
+        Self { top: top_codes, bottom: bottom_codes }
+    }
+}
+
 pub struct RNACode {
     /// Half the nucleotides
     values: Vec<Nucleotide>
@@ -158,6 +180,12 @@ impl FromStr for RNACode {
         }
 
         Ok(RNACode { values })
+    }
+}
+
+impl From<Vec<Nucleotide>> for RNACode {
+    fn from(codes: Vec<Nucleotide>) -> Self {
+        Self { values: codes }
     }
 }
 
@@ -233,6 +261,17 @@ impl Nucleotide {
             Nucleotide::C => Nucleotide::G,
             Nucleotide::G => Nucleotide::C,
             Nucleotide::T => Nucleotide::A,
+        }
+    }
+
+    pub const fn from_caps(c: char) -> Nucleotide {
+        match c {
+            'A' => Nucleotide::A,
+            'C' => Nucleotide::C,
+            'G' => Nucleotide::G,
+            'T' => Nucleotide::T,
+            'U' => Nucleotide::T,
+            _ => panic!("input must be a valid Nucleotide varent")
         }
     }
 }
