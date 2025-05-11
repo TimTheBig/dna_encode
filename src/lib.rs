@@ -1,29 +1,79 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::{Debug, Display}, str::FromStr};
 
+/// Create a new `DNACode`
+/// ```
+/// # use dna_encode::dna;
+/// # assert_eq!(
+/// dna![A, T, G],
+/// // or
+/// dna![
+///     A, T, G;
+///     T, A, C;
+/// ],
+/// # );
+/// ```
 #[macro_export]
-macro_rules! rna {
+macro_rules! dna {
     ($($nu:ident),+ $(,)?) => {
-        RNACode::from(vec![$( rna!(stringify!($nu).as_bytes()[0] as char) ),+]) // so user can say U or T
+        $crate::DNACode::from((
+            vec![$( $crate::dna!(stringify!($nu).as_bytes()[0] as char) ),+],
+            // find complementary in const
+            vec![
+                $( $crate::dna!(find complementary,
+                    ($crate::dna!(stringify!($nu).as_bytes()[0] as char))
+                ) ),+
+            ]
+        ))
     };
+    ($($nu1:ident),+ $(,)?; $($nu2:ident),+ $(,)? $(;)?) => {{
+        let dna = $crate::DNACode::from((
+            vec![$( $crate::dna!(stringify!($nu1).as_bytes()[0] as char) ),+],
+            vec![$( $crate::dna!(stringify!($nu2).as_bytes()[0] as char) ),+]
+        ));
+        // check complementary
+        #[cfg(debug_assertions)]
+        { assert!(dna.is_valid()); }
+
+        dna
+    }};
     ($nu:expr) => {
-        const { Nucleotide::from_caps($nu) }
+        const { $crate::Nucleotide::from_caps($nu) }
+    };
+    (find complementary, $nu:expr) => {
+        const { $nu.complementary() }
     };
 }
 
+/// Create a new `RNACode`
+/// ```
+/// # use dna_encode::rna;
+/// rna![A, U];
+/// ```
+#[macro_export]
+macro_rules! rna {
+    ($($nu:ident),+ $(,)?) => {
+        $crate::RNACode::from(vec![$( $crate::rna!(stringify!($nu).as_bytes()[0] as char) ),+]) // so user can input U or T
+    };
+    ($nu:expr) => {
+        const { $crate::Nucleotide::from_caps($nu) }
+    };
+}
+
+#[derive(PartialEq, Eq)]
 pub struct DNACode {
-    top: Vec<Nucleotide>,
-    bottom: Vec<Nucleotide>
+    top: RNACode,
+    bottom: RNACode,
 }
 
 impl Display for DNACode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for nucleotide in &self.top {
+        for nucleotide in &self.top.values {
             write!(f, "{}", nucleotide.to_char_dna())?
         }
 
         write!(f, "\n")?;
 
-        for nucleotide in &self.bottom {
+        for nucleotide in &self.bottom.values {
             write!(f, "{}", nucleotide.to_char_dna())?
         }
 
@@ -31,27 +81,43 @@ impl Display for DNACode {
     }
 }
 
+impl Debug for DNACode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DNACode")
+            .field("top", &self.top.values)
+            .field("bottom", &self.bottom.values)
+            .finish()
+    }
+}
+
 impl DNACode {
-    // bytes could be from bincode, which will be an optional feature
+    #[must_use]
     pub fn serialize_slice(bytes: &[u8]) -> Self {
         RNACode::serialize_slice(bytes).into()
     }
 
     /// (Top, Bottom)
     pub fn values(&self) -> (&[Nucleotide], &[Nucleotide]) {
-        (&self.top, &self.bottom)
+        (&self.top.values, &self.bottom.values)
+    }
+
+    /// If top and bottom have the same len and complementary nucleotides
+    pub fn is_valid(&self) -> bool {
+        if self.top.values.len() != self.bottom.values.len() {
+            return false;
+        }
+
+        let valid_bottom = self.top.complementary();
+
+        valid_bottom == self.bottom
     }
 }
 
 impl From<RNACode> for DNACode {
     fn from(rna: RNACode) -> Self {
-        let mut bottom = Vec::with_capacity(rna.values.len());
+        let bottom = rna.complementary();
 
-        for nucleotide in &rna.values {
-            bottom.push(nucleotide.complementary());
-        }
-
-        Self { top: rna.values, bottom }
+        Self { top: rna, bottom }
     }
 }
 
@@ -94,24 +160,35 @@ impl FromStr for DNACode {
         }
 
         Ok(Self {
-            top: top_rna.parse::<RNACode>()?.values,
-            bottom: bottom_rna.parse::<RNACode>()?.values,
+            top: top_rna.parse::<RNACode>()?,
+            bottom: bottom_rna.parse::<RNACode>()?,
         })
     }
 }
 
 impl From<(Vec<Nucleotide>, Vec<Nucleotide>)> for DNACode {
     fn from((top_codes, bottom_codes): (Vec<Nucleotide>, Vec<Nucleotide>)) -> Self {
-        Self { top: top_codes, bottom: bottom_codes }
+        let dna = Self { top: RNACode { values: top_codes }, bottom: RNACode { values: bottom_codes } };
+
+        #[cfg(debug_assertions)]
+        { dna.is_valid(); }
+
+        dna
     }
 }
 
 impl From<[Vec<Nucleotide>; 2]> for DNACode {
     fn from([top_codes, bottom_codes]: [Vec<Nucleotide>; 2]) -> Self {
-        Self { top: top_codes, bottom: bottom_codes }
+        let dna = Self { top: RNACode { values: top_codes }, bottom: RNACode { values: bottom_codes } };
+
+        #[cfg(debug_assertions)]
+        { dna.is_valid(); }
+
+        dna
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct RNACode {
     /// Half the nucleotides
     values: Vec<Nucleotide>
@@ -120,7 +197,7 @@ pub struct RNACode {
 impl Display for RNACode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for nucleotide in &self.values {
-            write!(f, "{:R<}", nucleotide)?//.to_char_rna())?
+            write!(f, "{:R<}", nucleotide)?;//.to_char_rna())?
         }
 
         Ok(())
@@ -128,7 +205,7 @@ impl Display for RNACode {
 }
 
 impl RNACode {
-    // bytes could be from bincode, which will be an optional feature
+    #[must_use]
     pub fn serialize_slice(bytes: &[u8]) -> Self {
         // four nucleotide(two bits) per byte
         let mut output = Vec::with_capacity(bytes.len() * 4);
@@ -158,7 +235,7 @@ impl RNACode {
                     (false, true) => Nucleotide::C,
                     (true, false) => Nucleotide::G,
                     (true, true) => Nucleotide::T,
-                })
+                });
             }
         }
 
@@ -167,6 +244,16 @@ impl RNACode {
 
     pub fn values(&self) -> &[Nucleotide] {
         &self.values
+    }
+
+    pub fn complementary(&self) -> Self {
+        let mut complementary = Vec::with_capacity(self.values.len());
+
+        for nucleotide in &self.values {
+            complementary.push(nucleotide.complementary());
+        }
+
+        Self { values: complementary }
     }
 }
 
@@ -255,7 +342,7 @@ impl Nucleotide {
         }
     }
 
-    fn complementary(&self) -> Nucleotide {
+    pub const fn complementary(&self) -> Nucleotide {
         match self {
             Nucleotide::A => Nucleotide::T,
             Nucleotide::C => Nucleotide::G,
@@ -293,7 +380,7 @@ impl TryFrom<char> for Nucleotide {
 
 #[cfg(test)]
 mod tests {
-    use super::{RNACode, DNACode, Nucleotide};
+    use super::{RNACode, DNACode, Nucleotide, rna, dna};
 
     #[test]
     fn test_rna() {
@@ -314,7 +401,7 @@ mod tests {
     #[test]
     fn test_dna_twice_rna() {
         let dna = DNACode::serialize_slice(include_bytes!("./lib.rs"));
-        let dna_len = dna.bottom.len() + dna.top.len();
+        let dna_len = dna.bottom.values.len() + dna.top.values.len();
 
         assert_eq!(dna_len / 2, RNACode::serialize_slice(include_bytes!("./lib.rs")).values.len());
     }
@@ -332,5 +419,21 @@ mod tests {
     fn test_nucleotide_format() {
         // T/U is different for rna and dna so this must be specified with fmt fill
         let _ = format!("{}", Nucleotide::T);
+    }
+
+    #[test]
+    fn test_macros() {
+        assert_eq!(rna![A, U].to_string(), "AU");
+
+        assert_eq!(dna![A, T, C].to_string(), "ATC\nTAG");
+
+        assert_eq!(dna![A, T; T, A;].to_string(), "AT\nTA");
+        assert_eq!(dna![A, U; T, A].to_string(), "AT\nTA");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_dna_macro_is_complement() {
+        let _ = dna![A, T, G;T, A, T];
     }
 }
